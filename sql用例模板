@@ -1,0 +1,64 @@
+用例目的：验证销量-整体市场-总体指标 是否正确
+
+前置条件：使用lux_test 账号登录，进入销量-整体市场功能正常
+
+预期结果：
+1.同比：100%*（当月销量-去年同月销量）/ 去年同月销量
+2.环比：100%*（当月销量-上月销量）/ 上月销量
+3.份额：100%* 豪华品牌销量 / 整体市场销量
+
+操作步骤：
+1.时间选择框，选择201811
+2.数据源选择，选择上险数
+3.产地属性选择框，选择合资
+4.燃料类型选择框，选择汽油
+5.品牌属性选择框，选择主流豪华品牌
+6.执行SQL与界面对比，查看是否一致
+
+---SQL：
+with t1 as( --参数输入
+select unit_id 
+,201811 ym            ---修改时间
+,7 data_type          ---6开票、7上险
+,'合资' poo_attribute ---修改产地属性
+,'汽油' fuel_type     ---修改燃料类型 
+,'主流豪华品牌' attr  ---修改品牌属性
+from da_user r 
+where r.login_id='lux_test' ---修改登录账号
+)
+,t2 as( --分母
+select t.ym,sum(t.bq_sales) bq,sum(t.bq_yearacc_sales) bq_yearacc
+from fdm_state_sales_sub_model_ft t
+left join dm_fuel_type f on f.fuel_type_id=t.fuel_type_id
+left join dm_sub_model m on m.sub_model_id=t.sub_model_id
+left join dm_poo_attribute p on p.poo_attribute_id=m.poo_attribute_id
+where t.ym=(select ym from t1)
+and t.data_type_id=(select data_type from t1)
+and f.fuel_type_name=(select fuel_type from t1)
+and p.poo_attribute_name=(select poo_attribute from t1)
+group by t.ym
+)
+select t.ym 月份,to_char(sum(t.bq_sales),'fm999,999,999') 销量
+,to_char(100*(sum(t.bq_sales)-sum(t.tq_sales))/sum(t.tq_sales),'fm999990.0')||'%' 同比
+,to_char(100*(sum(t.bq_sales)-sum(t.sq_sales))/sum(t.sq_sales),'fm999990.0')||'%' 环比
+,to_char(100*sum(t.bq_sales)/t2.bq,'fm999990.0')||'%' 份额
+,to_char(sum(t.bq_yearacc_sales),'fm999,999,999') 累计销量
+,to_char(100*(sum(t.bq_yearacc_sales)-sum(t.tq_yearacc_sales))/sum(t.tq_yearacc_sales),'fm999990.0')||'%' 同比
+,to_char(100*sum(t.bq_yearacc_sales)/t2.bq_yearacc,'fm999990.0')||'%' 累计份额
+from fdm_state_sales_sub_model_ft t
+left join dm_fuel_type f on f.fuel_type_id=t.fuel_type_id
+left join dm_sub_model m on m.sub_model_id=t.sub_model_id
+left join dm_poo_attribute p on p.poo_attribute_id=m.poo_attribute_id
+left join DA_LUXURY_ATTR_BRAND ab on ab.brand_id=m.brand_id
+left join da_luxury_attr a on a.luxury_attr_id=ab.luxury_attr_id
+left join da_sub_grade_sub_model sm on sm.sub_model_id=m.sub_model_id
+left join v_da_sub_grade g on g.sub_grade_id=sm.sub_grade_id 
+left join t2 on t2.ym=t.ym
+where a.unit_id=(select unit_id from t1)
+and g.unit_id=(select unit_id from t1)
+and t.data_type_id=(select data_type from t1)
+and t.ym=(select ym from t1)
+and a.luxury_attr_name=(select attr from t1)
+and f.fuel_type_name=(select fuel_type from t1)
+and p.poo_attribute_name=(select poo_attribute from t1)
+group by t.ym,t2.bq,t2.bq_yearacc
